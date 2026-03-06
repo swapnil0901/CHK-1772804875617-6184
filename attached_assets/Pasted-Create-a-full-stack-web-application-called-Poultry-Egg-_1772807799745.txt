@@ -1,0 +1,585 @@
+Create a full-stack web application called "Poultry Egg Tracker" designed for poultry farm owners to manage egg production, chicken health, and farm finances.
+
+The application should be modern, responsive, and mobile-friendly with a dashboard layout and sidebar navigation.
+
+Use the following technology stack:
+
+Frontend:
+React + Tailwind CSS + Chart.js
+
+Backend:
+Node.js + Express.js
+
+Database:
+PostgreSQL
+
+Authentication:
+JWT based login system
+
+AI Features:
+OpenAI / Gemini API integration
+
+The application must be clean, modern, and production-ready.
+
+1 APPLICATION FEATURES
+
+The Poultry Egg Tracker must include the following pages:
+
+Dashboard
+Egg Collection
+Egg Sales
+Chicken Management
+Disease Tracker
+Inventory Management
+Expense Management
+Vaccination Tracker
+Reports
+AI Assistant
+
+The layout should include a sidebar navigation menu.
+
+Sidebar Menu:
+
+Dashboard
+Egg Collection
+Egg Sales
+Chicken Management
+Disease Tracker
+Inventory
+Expenses
+Vaccination Tracker
+Reports
+AI Assistant
+Logout
+
+2 USER AUTHENTICATION
+
+Create a login system with role-based access control.
+
+Pages:
+
+Login
+Register
+
+Roles:
+
+Admin
+Worker
+
+Admin Permissions:
+
+Manage chickens
+View reports
+Add sales
+Add egg collection
+Manage workers
+View finances
+
+Worker Permissions:
+
+Add egg collection
+Add disease reports
+View dashboard
+
+Database table:
+
+users
+
+Fields:
+
+id
+name
+email
+password
+role
+created_at
+
+Use JWT authentication.
+
+3 DASHBOARD
+
+Create a modern dashboard with statistic cards and charts.
+
+Cards:
+
+Total Eggs Collected Today
+Eggs Sold Today
+Total Chickens
+Sick Chickens
+Remaining Eggs
+Total Revenue
+Total Expenses
+Net Profit
+
+Use Chart.js to display:
+
+Daily egg production chart
+Egg sales chart
+Revenue chart
+
+4 EGG COLLECTION PAGE
+
+Form Fields:
+
+Date
+Number of eggs collected
+Chicken shed name
+Notes
+
+POST request to:
+
+POST /api/eggs
+
+Database table:
+
+egg_collection
+
+Fields:
+
+id
+date
+eggs_collected
+shed
+notes
+
+5 EGG SALES PAGE
+
+Allow selling eggs by:
+
+Individual eggs
+Tray
+
+1 tray = 30 eggs
+
+Fields:
+
+Date
+Eggs sold
+Price per egg (₹)
+Customer name
+Sale type (Egg / Tray)
+
+Total amount should calculate automatically.
+
+Formula:
+
+total_amount = eggs_sold * price_per_egg
+
+API:
+
+POST /api/sales
+
+Database table:
+
+egg_sales
+
+Fields:
+
+id
+date
+eggs_sold
+price_per_egg
+customer_name
+total_amount
+
+6 CHICKEN MANAGEMENT
+
+Track chicken status.
+
+Fields:
+
+Total chickens
+Healthy chickens
+Sick chickens
+Dead chickens
+Small chicks
+
+Database table:
+
+chicken_management
+
+Fields:
+
+id
+total_chickens
+healthy
+sick
+dead
+chicks
+
+API:
+
+POST /api/chickens
+GET /api/chickens
+
+7 DISEASE TRACKER
+
+Track poultry diseases.
+
+Fields:
+
+Date
+Disease name
+Number of chickens affected
+Treatment given
+
+Database table:
+
+disease_records
+
+Fields:
+
+id
+date
+disease_name
+chickens_affected
+treatment
+
+API:
+
+POST /api/diseases
+GET /api/diseases
+
+8 INVENTORY MANAGEMENT
+
+Track farm supplies.
+
+Examples:
+
+Feed
+Medicine
+Vaccines
+Egg trays
+
+Database table:
+
+inventory
+
+Fields:
+
+id
+item_name
+quantity
+purchase_date
+supplier
+cost
+
+API:
+
+POST /api/inventory
+GET /api/inventory
+
+9 EXPENSE MANAGEMENT
+
+Track farm expenses.
+
+Examples:
+
+Feed purchase
+Medicine cost
+Electricity bill
+Worker salary
+
+Database table:
+
+expenses
+
+Fields:
+
+id
+date
+expense_type
+amount
+description
+
+API:
+
+POST /api/expenses
+GET /api/expenses
+
+10 VACCINATION TRACKER
+
+Track vaccination schedules.
+
+Fields:
+
+Vaccine name
+Date
+Number of chickens vaccinated
+Next vaccination date
+
+Database table:
+
+vaccinations
+
+Fields:
+
+id
+vaccine_name
+date
+chickens_vaccinated
+next_vaccination
+
+API:
+
+POST /api/vaccinations
+GET /api/vaccinations
+
+11 REPORTS PAGE
+
+Generate analytics and reports.
+
+Show:
+
+Total eggs collected
+Total eggs sold
+Remaining eggs
+Total revenue
+Total expenses
+Net profit
+
+Formula:
+
+Remaining eggs = eggs collected – eggs sold
+Profit = revenue – expenses
+
+Charts:
+
+Monthly egg production
+Sales trend
+Profit chart
+
+12 CSV EXPORT
+
+Allow exporting reports.
+
+Formats:
+
+CSV
+Excel
+PDF
+
+CSV should include:
+
+Date
+Eggs collected
+Eggs sold
+Revenue ₹
+
+13 INDIAN CURRENCY SUPPORT
+
+Use Indian Rupee (₹) everywhere.
+
+Examples:
+
+₹125
+₹1,250
+₹10,500
+₹1,00,000
+
+Update:
+
+Dashboard cards
+Reports
+Sales forms
+CSV export
+
+Rename:
+
+Price per egg → Price per egg (₹)
+
+14 INVENTORY ALERT SYSTEM
+
+Add notification alerts.
+
+Examples:
+
+⚠ Feed stock low
+⚠ Sick chickens detected
+⚠ Vaccination due tomorrow
+
+Display alerts on dashboard.
+
+15 SEARCH AND FILTER
+
+Add search and filters to tables.
+
+Examples:
+
+Search customer
+Search disease
+Filter by date
+Filter by shed
+
+16 MOBILE FRIENDLY UI
+
+The UI must be fully responsive.
+
+Requirements:
+
+Large buttons
+Simple forms
+Mobile optimized tables
+Clean design
+
+17 AI CHATBOT (GEN AI)
+
+Add an AI Poultry Assistant.
+
+Create a chat interface.
+
+Users can ask:
+
+How many eggs were collected today?
+Which chickens are sick?
+What is the total revenue this week?
+How to treat Newcastle disease?
+
+Backend endpoint:
+
+POST /api/ai-chat
+
+Use OpenAI or Gemini API.
+
+The AI should be able to:
+
+Answer poultry health questions
+Provide farm insights
+Explain reports
+
+18 AI EGG PRODUCTION PREDICTION
+
+Create a simple AI prediction feature.
+
+Using past 30 days egg data predict:
+
+Egg production tomorrow
+Egg production this week
+
+Use a simple ML model or statistical prediction.
+
+Display result on dashboard.
+
+Example:
+
+Predicted eggs tomorrow: 420
+
+19 WEATHER API INTEGRATION
+
+Use OpenWeather API.
+
+Show:
+
+Temperature
+Humidity
+
+Display recommendations.
+
+Example:
+
+Temperature: 32°C
+Humidity: 70%
+
+Recommendation:
+
+Increase ventilation for chickens.
+
+20 PROJECT STRUCTURE
+
+Create this folder structure.
+
+frontend
+
+src
+components
+pages
+charts
+services
+App.js
+
+backend
+
+server.js
+routes
+controllers
+models
+middleware
+
+database
+
+schema.sql
+
+21 DATABASE SETUP (POSTGRESQL)
+
+Create SQL schema.
+
+Tables:
+
+users
+egg_collection
+egg_sales
+chicken_management
+disease_records
+inventory
+expenses
+vaccinations
+
+22 DASHBOARD CALCULATIONS
+
+Remaining eggs:
+
+eggs_collected - eggs_sold
+
+Revenue:
+
+eggs_sold * price_per_egg
+
+Profit:
+
+revenue - expenses
+
+23 UI DESIGN
+
+Use a modern dashboard style.
+
+Features:
+
+Sidebar navigation
+Card components
+Data tables
+Charts
+Notifications
+
+Design should look like a professional farm management system.
+
+24 FINAL REQUIREMENTS
+
+Generate:
+
+Complete React frontend
+Node.js Express backend
+PostgreSQL database schema
+REST APIs
+JWT authentication
+Role based login
+CSV export system
+AI chatbot integration
+Charts and analytics
+Responsive UI
+
+Ensure the project runs with a single command:
+
+npm install
+npm run dev
+
+OPTIONAL (VERY IMPORTANT)
+
+Make the UI beautiful like a SaaS dashboard.
+
+Use:
+
+Tailwind
+Cards
+Icons
+Charts
+Clean tables
