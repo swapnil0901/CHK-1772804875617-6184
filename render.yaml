@@ -14,14 +14,6 @@ services:
         fromDatabase:
           name: poultry-egg-finder-db
           property: connectionString
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: OPENAI_BASE_URL
-        sync: false
-      - key: AI_INTEGRATIONS_OPENAI_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_OPENAI_BASE_URL
-        sync: false
 
 databases:
   - name: poultry-egg-finder-db
