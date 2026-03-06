@@ -5,15 +5,37 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
+function resolveOpenAIBaseUrl(): string | undefined {
+  const raw =
+    process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL;
+  const candidate = raw?.trim();
+
+  if (!candidate) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("Unsupported protocol");
+    }
+    return parsed.toString();
+  } catch {
+    console.warn(
+      `Ignoring invalid OpenAI base URL: "${candidate}". Expected full http(s) URL.`,
+    );
+    return undefined;
+  }
+}
+
 // Using Replit AI integrations blueprint
 const openaiApiKey =
   process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
+const openaiBaseUrl = resolveOpenAIBaseUrl();
 const openai = openaiApiKey
   ? new OpenAI({
       apiKey: openaiApiKey,
-      baseURL:
-        process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ??
-        process.env.OPENAI_BASE_URL,
+      baseURL: openaiBaseUrl,
     })
   : null;
 
