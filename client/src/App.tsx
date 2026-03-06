@@ -1,16 +1,72 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+// Pages
+import Auth from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
+import EggCollection from "./pages/EggCollection";
+import EggSales from "./pages/EggSales";
+import ChickenManagement from "./pages/ChickenManagement";
+import DiseaseTracker from "./pages/DiseaseTracker";
+import Inventory from "./pages/Inventory";
+import Expenses from "./pages/Expenses";
+import Vaccinations from "./pages/Vaccinations";
+import Reports from "./pages/Reports";
+import AIAssistant from "./pages/AIAssistant";
 import NotFound from "@/pages/not-found";
+
+import { useAuth } from "@/hooks/use-auth";
+
+// Route guard component
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  
+  if (isLoading) return null;
+  if (!user) return <Redirect to="/auth" />;
+  
+  return <Component />;
+}
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
+      <Route path="/auth" component={Auth} />
+      
+      {/* Protected Routes */}
+      <Route path="/">
+        {() => <ProtectedRoute component={Dashboard} />}
+      </Route>
+      <Route path="/eggs">
+        {() => <ProtectedRoute component={EggCollection} />}
+      </Route>
+      <Route path="/sales">
+        {() => <ProtectedRoute component={EggSales} />}
+      </Route>
+      <Route path="/chickens">
+        {() => <ProtectedRoute component={ChickenManagement} />}
+      </Route>
+      <Route path="/diseases">
+        {() => <ProtectedRoute component={DiseaseTracker} />}
+      </Route>
+      <Route path="/inventory">
+        {() => <ProtectedRoute component={Inventory} />}
+      </Route>
+      <Route path="/expenses">
+        {() => <ProtectedRoute component={Expenses} />}
+      </Route>
+      <Route path="/vaccinations">
+        {() => <ProtectedRoute component={Vaccinations} />}
+      </Route>
+      <Route path="/reports">
+        {() => <ProtectedRoute component={Reports} />}
+      </Route>
+      <Route path="/ai">
+        {() => <ProtectedRoute component={AIAssistant} />}
+      </Route>
+
       <Route component={NotFound} />
     </Switch>
   );

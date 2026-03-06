@@ -1,0 +1,106 @@
+import { useState, useEffect } from "react";
+import { AppLayout, PageHeader } from "@/components/layout/AppLayout";
+import { Button, Modal, Input, DataTable, Select } from "@/components/ui-kit";
+import { useSales, useCreateSale } from "@/hooks/use-poultry";
+import { formatDate, formatCurrency } from "@/lib/utils";
+import { Plus } from "lucide-react";
+
+export default function EggSales() {
+  const { data: sales, isLoading } = useSales();
+  const { mutateAsync: createSale, isPending } = useCreateSale();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [formData, setFormData] = useState({ 
+    date: new Date().toISOString().split('T')[0], 
+    customerName: '',
+    eggsSold: '', 
+    pricePerEgg: '',
+    saleType: 'Egg'
+  });
+
+  const totalAmount = (Number(formData.eggsSold) || 0) * (Number(formData.pricePerEgg) || 0);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await createSale({
+      date: new Date(formData.date),
+      customerName: formData.customerName,
+      eggsSold: Number(formData.eggsSold),
+      pricePerEgg: Number(formData.pricePerEgg),
+      totalAmount: totalAmount,
+      saleType: formData.saleType
+    });
+    setIsModalOpen(false);
+    setFormData({ date: new Date().toISOString().split('T')[0], customerName: '', eggsSold: '', pricePerEgg: '', saleType: 'Egg' });
+  };
+
+  return (
+    <AppLayout>
+      <PageHeader 
+        title="Egg Sales" 
+        description="Manage sales records and revenue generation."
+        action={<Button onClick={() => setIsModalOpen(true)}><Plus size={20}/> New Sale</Button>}
+      />
+
+      {isLoading ? (
+        <div className="p-8 text-center text-muted-foreground">Loading records...</div>
+      ) : (
+        <DataTable headers={["Date", "Customer", "Type", "Quantity", "Price", "Total Amount"]}>
+          {sales?.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(record => (
+            <tr key={record.id} className="hover:bg-black/5 transition-colors">
+              <td className="px-6 py-4 font-medium">{formatDate(record.date)}</td>
+              <td className="px-6 py-4 font-semibold">{record.customerName}</td>
+              <td className="px-6 py-4">
+                <span className="px-3 py-1 bg-accent/20 text-accent-foreground rounded-full text-xs font-bold uppercase tracking-wider">
+                  {record.saleType}
+                </span>
+              </td>
+              <td className="px-6 py-4 font-display font-bold">{record.eggsSold.toLocaleString()}</td>
+              <td className="px-6 py-4 text-muted-foreground">{formatCurrency(record.pricePerEgg as string)}</td>
+              <td className="px-6 py-4 font-bold text-success text-lg">{formatCurrency(record.totalAmount as string)}</td>
+            </tr>
+          ))}
+          {(!sales || sales.length === 0) && (
+            <tr><td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">No sales recorded yet.</td></tr>
+          )}
+        </DataTable>
+      )}
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Record New Sale">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Input 
+            label="Date" type="date" required
+            value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})}
+          />
+          <Input 
+            label="Customer Name" required placeholder="e.g. Fresh Mart"
+            value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Select label="Sale Unit" value={formData.saleType} onChange={e => setFormData({...formData, saleType: e.target.value})}>
+              <option value="Egg">Individual Eggs</option>
+              <option value="Tray">Trays (30 eggs)</option>
+            </Select>
+            <Input 
+              label={`Quantity (${formData.saleType}s)`} type="number" min="1" required
+              value={formData.eggsSold} onChange={e => setFormData({...formData, eggsSold: e.target.value})}
+            />
+          </div>
+          <Input 
+            label={`Price per ${formData.saleType} (₹)`} type="number" step="0.01" min="0" required
+            value={formData.pricePerEgg} onChange={e => setFormData({...formData, pricePerEgg: e.target.value})}
+          />
+          
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex justify-between items-center mt-2">
+            <span className="font-semibold text-primary">Total Amount:</span>
+            <span className="font-display font-bold text-2xl text-primary">{formatCurrency(totalAmount)}</span>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isPending || totalAmount <= 0}>
+            {isPending ? "Processing..." : "Complete Sale"}
+          </Button>
+        </form>
+      </Modal>
+    </AppLayout>
+  );
+}
