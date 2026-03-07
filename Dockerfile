@@ -15,6 +15,8 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=build /app/shared ./shared
 
 EXPOSE 5000
 CMD ["node", "dist/index.cjs"]
