@@ -1,14 +1,17 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
-import * as schema from "@shared/schema";
+import { MongoClient, type Db } from "mongodb";
 import "dotenv/config";
 
-function resolveDatabaseUrl(): string | undefined {
+type CounterDocument = {
+  _id: string;
+  seq: number;
+};
+
+function resolveMongoUrl(): string | undefined {
   const candidates: Array<[string, string | undefined]> = [
+    ["MONGODB_URI", process.env.MONGODB_URI],
+    ["MONGO_URL", process.env.MONGO_URL],
     ["DATABASE_URL", process.env.DATABASE_URL],
     ["DATABASE_INTERNAL_URL", process.env.DATABASE_INTERNAL_URL],
-    ["POSTGRES_URL", process.env.POSTGRES_URL],
-    ["PGURL", process.env.PGURL],
   ];
 
   for (const [key, rawValue] of candidates) {
@@ -16,7 +19,7 @@ function resolveDatabaseUrl(): string | undefined {
     if (!value) continue;
 
     try {
-      return validateDatabaseUrl(value);
+      return validateMongoUrl(value);
     } catch (error) {
       console.warn(`Ignoring invalid ${key}: ${(error as Error).message}`);
     }
@@ -25,66 +28,126 @@ function resolveDatabaseUrl(): string | undefined {
   return undefined;
 }
 
-function validateDatabaseUrl(databaseUrl: string): string {
+function validateMongoUrl(mongoUrl: string): string {
   let parsed: URL;
 
   try {
-    parsed = new URL(databaseUrl);
+    parsed = new URL(mongoUrl);
   } catch {
-    throw new Error("Invalid DATABASE_URL format. Expected a full postgres:// URL.");
+    throw new Error("Invalid MongoDB URL format. Expected a full mongodb:// or mongodb+srv:// URL.");
   }
 
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error("Invalid DATABASE_URL protocol. Use postgres:// or postgresql://.");
+  if (parsed.protocol !== "mongodb:" && parsed.protocol !== "mongodb+srv:") {
+    throw new Error("Invalid MongoDB protocol. Use mongodb:// or mongodb+srv://.");
   }
 
   if (!parsed.hostname || parsed.hostname.toLowerCase() === "base") {
     throw new Error(
-      'Invalid DATABASE_URL host "base". Set DATABASE_URL to your real Postgres URL.',
+      'Invalid MongoDB host "base". Set MONGODB_URI to your real MongoDB URL.',
     );
   }
 
-  return databaseUrl;
+  return mongoUrl;
 }
 
-function resolveSslPreference(databaseUrl: string | undefined, isProduction: boolean): boolean {
-  const pgSsl = process.env.PGSSL?.trim().toLowerCase();
-  if (pgSsl === "true") return true;
-  if (pgSsl === "false") return false;
-  if (!databaseUrl) return false;
-
-  const parsed = new URL(databaseUrl);
-  const sslMode = parsed.searchParams.get("sslmode")?.toLowerCase();
-  if (sslMode && sslMode !== "disable") {
-    return true;
+function resolveDatabaseName(mongoUrl: string | undefined): string {
+  const explicit = process.env.MONGODB_DB?.trim() || process.env.MONGO_DB?.trim();
+  if (explicit) {
+    return explicit;
   }
 
-  const host = parsed.hostname.toLowerCase();
-  const isLocalHost = host === "localhost" || host === "127.0.0.1" || host === "::1";
-  return isProduction && !isLocalHost;
+  if (!mongoUrl) {
+    return "poultry_egg_finder";
+  }
+
+  try {
+    const parsed = new URL(mongoUrl);
+    const path = parsed.pathname.replace(/^\//, "");
+    return path || "poultry_egg_finder";
+  } catch {
+    return "poultry_egg_finder";
+  }
 }
 
-const { Pool } = pg;
 const isProduction = process.env.NODE_ENV !== "development";
-const databaseUrl = resolveDatabaseUrl();
+const mongoUrl = resolveMongoUrl();
+const databaseName = resolveDatabaseName(mongoUrl);
 
-if (isProduction && !databaseUrl) {
+if (isProduction && !mongoUrl) {
   throw new Error(
-    "DATABASE_URL is required in production. Set DATABASE_URL (or DATABASE_INTERNAL_URL/POSTGRES_URL).",
+    "MONGODB_URI is required in production. Set MONGODB_URI (or MONGO_URL).",
   );
 }
 
-const shouldUseSsl = resolveSslPreference(databaseUrl, isProduction);
-
-export const pool = databaseUrl
-  ? new Pool({
-      connectionString: databaseUrl,
-      ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
+const client = mongoUrl
+  ? new MongoClient(mongoUrl, {
+      maxPoolSize: 10,
+      minPoolSize: 0,
+      serverSelectionTimeoutMS: 10_000,
     })
   : null;
 
-// Storage selects an in-memory fallback when DATABASE_URL is missing.
-export const db = pool ? drizzle(pool, { schema }) : (null as any);
+const dbPromise: Promise<Db> | null = client
+  ? client.connect().then((connectedClient) => connectedClient.db(databaseName))
+  : null;
+
+let indexPromise: Promise<void> | null = null;
+
+async function ensureIndexes(db: Db): Promise<void> {
+  if (!indexPromise) {
+    indexPromise = (async () => {
+      await Promise.all([
+        db.collection("users").createIndex({ id: 1 }, { unique: true }),
+        db.collection("users").createIndex({ email: 1 }, { unique: true }),
+        db.collection("egg_collection").createIndex({ id: 1 }, { unique: true }),
+        db.collection("egg_sales").createIndex({ id: 1 }, { unique: true }),
+        db.collection("chicken_management").createIndex({ id: 1 }, { unique: true }),
+        db.collection("disease_records").createIndex({ id: 1 }, { unique: true }),
+        db.collection("inventory").createIndex({ id: 1 }, { unique: true }),
+        db.collection("expenses").createIndex({ id: 1 }, { unique: true }),
+        db.collection("vaccinations").createIndex({ id: 1 }, { unique: true }),
+        db.collection("conversations").createIndex({ id: 1 }, { unique: true }),
+        db.collection("messages").createIndex({ id: 1 }, { unique: true }),
+        db.collection("messages").createIndex({ conversationId: 1, createdAt: 1 }),
+      ]);
+    })().catch((error) => {
+      indexPromise = null;
+      throw error;
+    });
+  }
+
+  await indexPromise;
+}
+
+export const isMongoConfigured = Boolean(mongoUrl);
+
+export async function getMongoDb(): Promise<Db | null> {
+  if (!dbPromise) {
+    return null;
+  }
+
+  const db = await dbPromise;
+  await ensureIndexes(db);
+  return db;
+}
+
+export async function getMongoDbOrThrow(): Promise<Db> {
+  const db = await getMongoDb();
+  if (!db) {
+    throw new Error("MongoDB is not configured. Set MONGODB_URI to enable database storage.");
+  }
+  return db;
+}
+
+export async function getNextSequence(name: string): Promise<number> {
+  const db = await getMongoDbOrThrow();
+  const counters = db.collection<CounterDocument>("counters");
+
+  const result = await counters.findOneAndUpdate(
+    { _id: name },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: "after" },
+  );
+
+  return result?.seq ?? 1;
+}

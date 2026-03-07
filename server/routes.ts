@@ -541,9 +541,9 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
-        const dbError = err as { code?: string; message?: string };
+        const dbError = err as { code?: string | number; message?: string };
 
-        if (dbError.code === "23505") {
+        if (dbError.code === "23505" || dbError.code === "11000" || dbError.code === 11000) {
           return res.status(409).json({ message: "Email already registered. Please sign in." });
         }
 

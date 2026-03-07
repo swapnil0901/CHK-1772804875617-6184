@@ -1,20 +1,35 @@
-import { db } from "./db";
-import { 
-  users, eggCollection, eggSales, chickenManagement, diseaseRecords, 
-  inventory, expenses, vaccinations,
-  type User, type EggCollection, type EggSales, type ChickenManagement,
-  type DiseaseRecord, type Inventory, type Expense, type Vaccination,
-  type InsertUser
+import { getMongoDbOrThrow, getNextSequence, isMongoConfigured } from "./db";
+import {
+  type User,
+  type EggCollection,
+  type EggSales,
+  type ChickenManagement,
+  type DiseaseRecord,
+  type Inventory,
+  type Expense,
+  type Vaccination,
+  type InsertUser,
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { api } from "@shared/routes";
+
+type MongoDocument<T> = T & { _id?: unknown };
 
 function toDateOnly(value: string | Date | undefined): string {
   if (!value) {
     return new Date().toISOString().split("T")[0];
   }
   return new Date(value).toISOString().split("T")[0];
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function stripMongoId<T extends { _id?: unknown }>(document: T): Omit<T, "_id"> {
+  const { _id, ...rest } = document;
+  return rest;
 }
 
 export interface IStorage {
@@ -53,113 +68,205 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private async db() {
+    return getMongoDbOrThrow();
+  }
+
   // Auth
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    const db = await this.db();
+    const user = await db.collection<MongoDocument<User>>("users").findOne({ email });
+    return user ? stripMongoId(user) : undefined;
   }
 
   async getUserById(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const db = await this.db();
+    const user = await db.collection<MongoDocument<User>>("users").findOne({ id });
+    return user ? stripMongoId(user) : undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const db = await this.db();
+    const user: User = {
+      id: await getNextSequence("users"),
+      ...insertUser,
+      createdAt: new Date(),
+    };
+    await db.collection<User>("users").insertOne(user);
     return user;
   }
 
   // Egg Collection
   async getEggCollections(): Promise<EggCollection[]> {
-    return await db.select().from(eggCollection).orderBy(desc(eggCollection.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<EggCollection>>("egg_collection")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createEggCollection(data: z.infer<typeof api.eggCollection.create.input>): Promise<EggCollection> {
-    const [record] = await db.insert(eggCollection).values({
-      ...data,
-      date: new Date(data.date).toISOString().split('T')[0],
-      brokenEggs: data.brokenEggs ?? 0,
-    }).returning();
+    const db = await this.db();
+    const record: EggCollection = {
+      id: await getNextSequence("egg_collection"),
+      date: toDateOnly(data.date),
+      eggsCollected: toNumber(data.eggsCollected),
+      brokenEggs: toNumber(data.brokenEggs, 0),
+      shed: data.shed,
+      notes: data.notes ?? null,
+    };
+    await db.collection<EggCollection>("egg_collection").insertOne(record);
     return record;
   }
 
   // Egg Sales
   async getEggSales(): Promise<EggSales[]> {
-    return await db.select().from(eggSales).orderBy(desc(eggSales.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<EggSales>>("egg_sales")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createEggSales(data: z.infer<typeof api.eggSales.create.input>): Promise<EggSales> {
-    const [record] = await db.insert(eggSales).values({
-      ...data,
-      date: new Date(data.date).toISOString().split('T')[0],
+    const db = await this.db();
+    const record: EggSales = {
+      id: await getNextSequence("egg_sales"),
+      date: toDateOnly(data.date),
+      eggsSold: toNumber(data.eggsSold),
       pricePerEgg: data.pricePerEgg.toString(),
-      totalAmount: data.totalAmount.toString()
-    }).returning();
+      customerName: data.customerName,
+      totalAmount: data.totalAmount.toString(),
+      saleType: data.saleType ?? "Egg",
+    };
+    await db.collection<EggSales>("egg_sales").insertOne(record);
     return record;
   }
 
   // Chicken Management
   async getChickenManagement(): Promise<ChickenManagement[]> {
-    return await db.select().from(chickenManagement).orderBy(desc(chickenManagement.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<ChickenManagement>>("chicken_management")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createChickenManagement(data: z.infer<typeof api.chickens.create.input>): Promise<ChickenManagement> {
-    const [record] = await db.insert(chickenManagement).values(data).returning();
+    const db = await this.db();
+    const record: ChickenManagement = {
+      id: await getNextSequence("chicken_management"),
+      date: toDateOnly(data.date),
+      totalChickens: toNumber(data.totalChickens),
+      healthy: toNumber(data.healthy),
+      sick: toNumber(data.sick),
+      dead: toNumber(data.dead),
+      chicks: toNumber(data.chicks),
+    };
+    await db.collection<ChickenManagement>("chicken_management").insertOne(record);
     return record;
   }
 
   // Disease Records
   async getDiseaseRecords(): Promise<DiseaseRecord[]> {
-    return await db.select().from(diseaseRecords).orderBy(desc(diseaseRecords.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<DiseaseRecord>>("disease_records")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createDiseaseRecord(data: z.infer<typeof api.diseases.create.input>): Promise<DiseaseRecord> {
-    const [record] = await db.insert(diseaseRecords).values({
-      ...data,
-      date: new Date(data.date).toISOString().split('T')[0]
-    }).returning();
+    const db = await this.db();
+    const record: DiseaseRecord = {
+      id: await getNextSequence("disease_records"),
+      date: toDateOnly(data.date),
+      diseaseName: data.diseaseName,
+      chickensAffected: toNumber(data.chickensAffected),
+      treatment: data.treatment,
+    };
+    await db.collection<DiseaseRecord>("disease_records").insertOne(record);
     return record;
   }
 
   // Inventory
   async getInventory(): Promise<Inventory[]> {
-    return await db.select().from(inventory).orderBy(desc(inventory.purchaseDate));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<Inventory>>("inventory")
+      .find({})
+      .sort({ purchaseDate: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createInventory(data: z.infer<typeof api.inventory.create.input>): Promise<Inventory> {
-    const [record] = await db.insert(inventory).values({
-      ...data,
-      purchaseDate: new Date(data.purchaseDate).toISOString().split('T')[0],
-      cost: data.cost.toString()
-    }).returning();
+    const db = await this.db();
+    const record: Inventory = {
+      id: await getNextSequence("inventory"),
+      itemName: data.itemName,
+      quantity: toNumber(data.quantity),
+      purchaseDate: toDateOnly(data.purchaseDate),
+      supplier: data.supplier,
+      cost: data.cost.toString(),
+    };
+    await db.collection<Inventory>("inventory").insertOne(record);
     return record;
   }
 
   // Expenses
   async getExpenses(): Promise<Expense[]> {
-    return await db.select().from(expenses).orderBy(desc(expenses.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<Expense>>("expenses")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createExpense(data: z.infer<typeof api.expenses.create.input>): Promise<Expense> {
-    const [record] = await db.insert(expenses).values({
-      ...data,
-      date: new Date(data.date).toISOString().split('T')[0],
-      amount: data.amount.toString()
-    }).returning();
+    const db = await this.db();
+    const record: Expense = {
+      id: await getNextSequence("expenses"),
+      date: toDateOnly(data.date),
+      expenseType: data.expenseType,
+      amount: data.amount.toString(),
+      description: data.description ?? null,
+    };
+    await db.collection<Expense>("expenses").insertOne(record);
     return record;
   }
 
   // Vaccinations
   async getVaccinations(): Promise<Vaccination[]> {
-    return await db.select().from(vaccinations).orderBy(desc(vaccinations.date));
+    const db = await this.db();
+    const records = await db
+      .collection<MongoDocument<Vaccination>>("vaccinations")
+      .find({})
+      .sort({ date: -1, id: -1 })
+      .toArray();
+    return records.map(stripMongoId);
   }
 
   async createVaccination(data: z.infer<typeof api.vaccinations.create.input>): Promise<Vaccination> {
-    const [record] = await db.insert(vaccinations).values({
-      ...data,
-      date: new Date(data.date).toISOString().split('T')[0],
-      nextVaccination: new Date(data.nextVaccination).toISOString().split('T')[0]
-    }).returning();
+    const db = await this.db();
+    const record: Vaccination = {
+      id: await getNextSequence("vaccinations"),
+      vaccineName: data.vaccineName,
+      date: toDateOnly(data.date),
+      chickensVaccinated: toNumber(data.chickensVaccinated),
+      nextVaccination: toDateOnly(data.nextVaccination),
+    };
+    await db.collection<Vaccination>("vaccinations").insertOne(record);
     return record;
   }
 }
@@ -335,7 +442,7 @@ export class MemoryStorage implements IStorage {
 }
 
 const shouldUseMemoryStorage =
-  !process.env.DATABASE_URL && process.env.NODE_ENV !== "production";
+  !isMongoConfigured && process.env.NODE_ENV !== "production";
 
 export const storage: IStorage = shouldUseMemoryStorage
   ? new MemoryStorage()
