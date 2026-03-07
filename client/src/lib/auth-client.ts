@@ -2,6 +2,7 @@
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   const headers = new Headers(options.headers);
+  const method = (options.method || 'GET').toUpperCase();
   
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -11,7 +12,12 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(url, { ...options, headers });
+  const requestInit: RequestInit = { ...options, headers };
+  if (method === 'GET' && !requestInit.cache) {
+    requestInit.cache = 'no-store';
+  }
+
+  const res = await fetch(url, requestInit);
   
   if (res.status === 401 && window.location.pathname !== '/auth') {
     localStorage.removeItem('token');
