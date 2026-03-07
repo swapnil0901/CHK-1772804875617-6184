@@ -2,14 +2,25 @@ import { defineConfig } from "drizzle-kit";
 import "dotenv/config";
 
 function resolveDatabaseUrl(): string | undefined {
-  const candidate =
-    process.env.DATABASE_URL ||
-    process.env.DATABASE_INTERNAL_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.PGURL;
+  const candidates: Array<[string, string | undefined]> = [
+    ["DATABASE_URL", process.env.DATABASE_URL],
+    ["DATABASE_INTERNAL_URL", process.env.DATABASE_INTERNAL_URL],
+    ["POSTGRES_URL", process.env.POSTGRES_URL],
+    ["PGURL", process.env.PGURL],
+  ];
 
-  const trimmed = candidate?.trim();
-  return trimmed || undefined;
+  for (const [key, rawValue] of candidates) {
+    const value = rawValue?.trim();
+    if (!value) continue;
+
+    try {
+      return validateDatabaseUrl(value);
+    } catch (error) {
+      console.warn(`Ignoring invalid ${key}: ${(error as Error).message}`);
+    }
+  }
+
+  return undefined;
 }
 
 function validateDatabaseUrl(databaseUrl: string): string {
@@ -34,8 +45,7 @@ function validateDatabaseUrl(databaseUrl: string): string {
   return databaseUrl;
 }
 
-const rawDatabaseUrl = resolveDatabaseUrl();
-const databaseUrl = rawDatabaseUrl ? validateDatabaseUrl(rawDatabaseUrl) : undefined;
+const databaseUrl = resolveDatabaseUrl();
 
 if (!databaseUrl) {
   throw new Error(
