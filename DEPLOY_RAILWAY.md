@@ -9,7 +9,7 @@ Make sure your latest code is in the GitHub repo.
 3. Select this repository
 
 `railway.json` in this repo already sets:
-- Build command: `npm ci --include=dev && npm run db:push -- --force && npm run build`
+- Build command: `npm install --include=dev && npm run db:push -- --force && npm run build`
 - Start command: `npm run start`
 
 ## 3. Add PostgreSQL

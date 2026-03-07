@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     autoDeployTrigger: commit
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run build
     preDeployCommand: npm run db:push -- --force
     startCommand: node dist/index.cjs
     envVars:
