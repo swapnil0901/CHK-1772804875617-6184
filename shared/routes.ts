@@ -8,6 +8,7 @@ import {
   insertInventorySchema, inventory,
   insertExpensesSchema, expenses,
   insertFeedMetricsSchema, feedMetrics,
+  whatsappMessages,
   insertVaccinationsSchema, vaccinations
 } from './schema';
 
@@ -41,6 +42,9 @@ const dashboardAnalyticsSchema = z.object({
     feedConsumedKg: z.number(),
     feedStockKg: z.number(),
     mortalityCount: z.number(),
+    healthyChickens: z.number(),
+    sickChickens: z.number(),
+    newChicks: z.number(),
   }),
   profit: z.object({
     daily: z.number(),
@@ -267,6 +271,38 @@ export const api = {
         200: dashboardAnalyticsSchema,
       }
     }
+  },
+  alerts: {
+    sendWhatsApp: {
+      method: 'POST' as const,
+      path: '/send-alert' as const,
+      input: z.object({
+        phone: z.string().min(8).optional(),
+        eggs: z.coerce.number().min(0).optional(),
+        brokenEggs: z.coerce.number().min(0).optional(),
+        feed: z.coerce.number().min(0).optional(),
+        profit: z.coerce.number().optional(),
+        date: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      responses: {
+        200: z.object({
+          status: z.literal("Message Ready"),
+          messageId: z.number(),
+          dataSource: z.enum(["database", "request"]),
+          whatsappLink: z.string().url(),
+          preview: z.string(),
+        }),
+        400: errorSchemas.validation,
+      }
+    },
+    history: {
+      method: 'GET' as const,
+      path: '/api/alerts/messages' as const,
+      responses: {
+        200: z.array(z.custom<typeof whatsappMessages.$inferSelect>()),
+      }
+    },
   },
   ai: {
     chat: {

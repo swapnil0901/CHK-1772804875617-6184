@@ -10,6 +10,7 @@ import {
   expenses,
   feedMetrics,
   alertEvents,
+  whatsappMessages,
   vaccinations,
   type User,
   type EggCollection,
@@ -20,6 +21,7 @@ import {
   type Expense,
   type FeedMetric,
   type AlertEvent,
+  type WhatsAppMessage,
   type Vaccination,
   type InsertUser,
 } from "@shared/schema";
@@ -47,6 +49,18 @@ export interface CreateAlertEventInput {
   currentValue: number;
   smsSent: boolean;
   smsResponse?: string | null;
+}
+
+export interface CreateWhatsAppMessageInput {
+  phone: string;
+  messageDate: string;
+  eggs: number;
+  brokenEggs: number;
+  feedConsumedKg: number;
+  profit: number;
+  status: string;
+  messageText: string;
+  whatsappLink: string;
 }
 
 export interface IStorage {
@@ -87,6 +101,10 @@ export interface IStorage {
   getAlertEventsByDate(alertDate: string): Promise<AlertEvent[]>;
   getAlertEventByDateAndType(alertDate: string, alertType: string): Promise<AlertEvent | undefined>;
   createAlertEvent(input: CreateAlertEventInput): Promise<AlertEvent>;
+
+  // WhatsApp messages
+  getWhatsAppMessages(limit?: number): Promise<WhatsAppMessage[]>;
+  createWhatsAppMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessage>;
 
   // Vaccinations
   getVaccinations(): Promise<Vaccination[]>;
@@ -390,6 +408,42 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
 
+  // WhatsApp Messages
+  async getWhatsAppMessages(limit = 50): Promise<WhatsAppMessage[]> {
+    const database = await this.database();
+    const rows = await database
+      .select()
+      .from(whatsappMessages)
+      .orderBy(desc(whatsappMessages.sentAt), desc(whatsappMessages.id))
+      .limit(Math.max(1, Math.min(limit, 500)));
+
+    return rows;
+  }
+
+  async createWhatsAppMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessage> {
+    const database = await this.database();
+    const [message] = await database
+      .insert(whatsappMessages)
+      .values({
+        phone: input.phone,
+        messageDate: toDateOnly(input.messageDate),
+        eggs: toNumber(input.eggs),
+        brokenEggs: toNumber(input.brokenEggs),
+        feedConsumedKg: toNumber(input.feedConsumedKg).toString(),
+        profit: toNumber(input.profit).toString(),
+        status: input.status,
+        messageText: input.messageText,
+        whatsappLink: input.whatsappLink,
+      })
+      .returning();
+
+    if (!message) {
+      throw new Error("Failed to create WhatsApp message record.");
+    }
+
+    return message;
+  }
+
   // Vaccinations
   async getVaccinations(): Promise<Vaccination[]> {
     const database = await this.database();
@@ -429,6 +483,7 @@ export class MemoryStorage implements IStorage {
   private expenseId = 1;
   private feedMetricId = 1;
   private alertEventId = 1;
+  private whatsappMessageId = 1;
   private vaccinationId = 1;
 
   private userRecords: User[] = [];
@@ -440,6 +495,7 @@ export class MemoryStorage implements IStorage {
   private expenseRecords: Expense[] = [];
   private feedMetricRecords: FeedMetric[] = [];
   private alertEventRecords: AlertEvent[] = [];
+  private whatsappMessageRecords: WhatsAppMessage[] = [];
   private vaccinationRecords: Vaccination[] = [];
 
   async getUserByEmail(email: string): Promise<User | undefined> {
@@ -628,6 +684,31 @@ export class MemoryStorage implements IStorage {
 
     this.alertEventRecords.push(event);
     return event;
+  }
+
+  async getWhatsAppMessages(limit = 50): Promise<WhatsAppMessage[]> {
+    return [...this.whatsappMessageRecords]
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      .slice(0, Math.max(1, Math.min(limit, 500)));
+  }
+
+  async createWhatsAppMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessage> {
+    const record: WhatsAppMessage = {
+      id: this.whatsappMessageId++,
+      sentAt: new Date(),
+      phone: input.phone,
+      messageDate: toDateOnly(input.messageDate),
+      eggs: toNumber(input.eggs),
+      brokenEggs: toNumber(input.brokenEggs),
+      feedConsumedKg: toNumber(input.feedConsumedKg).toString(),
+      profit: toNumber(input.profit).toString(),
+      status: input.status,
+      messageText: input.messageText,
+      whatsappLink: input.whatsappLink,
+    };
+
+    this.whatsappMessageRecords.push(record);
+    return record;
   }
 
   async getVaccinations(): Promise<Vaccination[]> {

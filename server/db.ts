@@ -225,6 +225,22 @@ async function initializeSchema(database: AppDatabase): Promise<void> {
   `);
 
   await database.execute(sql`
+    CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      id SERIAL PRIMARY KEY,
+      sent_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      phone TEXT NOT NULL,
+      message_date DATE NOT NULL,
+      eggs INTEGER NOT NULL,
+      broken_eggs INTEGER NOT NULL DEFAULT 0,
+      feed_consumed_kg NUMERIC NOT NULL DEFAULT 0,
+      profit NUMERIC NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Normal',
+      message_text TEXT NOT NULL,
+      whatsapp_link TEXT NOT NULL
+    )
+  `);
+
+  await database.execute(sql`
     CREATE TABLE IF NOT EXISTS vaccinations (
       id SERIAL PRIMARY KEY,
       vaccine_name TEXT NOT NULL,

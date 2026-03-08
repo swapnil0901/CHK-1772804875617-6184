@@ -105,6 +105,20 @@ export const alertEvents = pgTable("alert_events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: serial("id").primaryKey(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  phone: text("phone").notNull(),
+  messageDate: date("message_date").notNull(),
+  eggs: integer("eggs").notNull(),
+  brokenEggs: integer("broken_eggs").notNull().default(0),
+  feedConsumedKg: numeric("feed_consumed_kg").notNull().default("0"),
+  profit: numeric("profit").notNull().default("0"),
+  status: text("status").notNull().default("Normal"),
+  messageText: text("message_text").notNull(),
+  whatsappLink: text("whatsapp_link").notNull(),
+});
+
 export const vaccinations = pgTable("vaccinations", {
   id: serial("id").primaryKey(),
   vaccineName: text("vaccine_name").notNull(),
@@ -124,6 +138,7 @@ export const insertInventorySchema = createInsertSchema(inventory).omit({ id: tr
 export const insertExpensesSchema = createInsertSchema(expenses).omit({ id: true });
 export const insertFeedMetricsSchema = createInsertSchema(feedMetrics).omit({ id: true });
 export const insertAlertEventsSchema = createInsertSchema(alertEvents).omit({ id: true, createdAt: true });
+export const insertWhatsappMessagesSchema = createInsertSchema(whatsappMessages).omit({ id: true, sentAt: true });
 export const insertVaccinationsSchema = createInsertSchema(vaccinations).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -137,6 +152,7 @@ export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertExpense = z.infer<typeof insertExpensesSchema>;
 export type InsertFeedMetric = z.infer<typeof insertFeedMetricsSchema>;
 export type InsertAlertEvent = z.infer<typeof insertAlertEventsSchema>;
+export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessagesSchema>;
 export type InsertVaccination = z.infer<typeof insertVaccinationsSchema>;
 
 export type User = typeof users.$inferSelect;
@@ -150,4 +166,5 @@ export type Inventory = typeof inventory.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type FeedMetric = typeof feedMetrics.$inferSelect;
 export type AlertEvent = typeof alertEvents.$inferSelect;
+export type WhatsAppMessage = typeof whatsappMessages.$inferSelect;
 export type Vaccination = typeof vaccinations.$inferSelect;

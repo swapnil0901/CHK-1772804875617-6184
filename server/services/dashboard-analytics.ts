@@ -67,21 +67,109 @@ function formatPercent(value: number): string {
 }
 
 function toSmsMessage(alert: DashboardAlert): string {
-  return `⚠ Poultry Smart Buddy Alert\n${alert.title}\n${alert.message}`;
+  return `Poultry Smart Buddy Alert\n${alert.title}\n${alert.message}`;
+}
+
+function toWhatsAppAddress(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("whatsapp:")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("+")) {
+    return `whatsapp:${trimmed}`;
+  }
+
+  return `whatsapp:+${trimmed}`;
+}
+
+async function sendTwilioWhatsApp(
+  alert: DashboardAlert,
+): Promise<{ smsSent: boolean; smsResponse: string | null }> {
+  const sid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const token = process.env.TWILIO_AUTH_TOKEN?.trim();
+  const fromRaw = process.env.TWILIO_WHATSAPP_FROM?.trim() || "whatsapp:+14155238886";
+  const toRaw =
+    process.env.TWILIO_WHATSAPP_TO?.trim() ??
+    process.env.FARM_OWNER_WHATSAPP?.trim() ??
+    process.env.FARM_OWNER_PHONE?.trim();
+
+  if (!sid || !token) {
+    return {
+      smsSent: false,
+      smsResponse: "Twilio credentials are missing (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).",
+    };
+  }
+
+  if (!toRaw) {
+    return {
+      smsSent: false,
+      smsResponse: "Twilio destination is missing (TWILIO_WHATSAPP_TO or FARM_OWNER_WHATSAPP).",
+    };
+  }
+
+  const params = new URLSearchParams();
+  params.set("From", toWhatsAppAddress(fromRaw));
+  params.set("To", toWhatsAppAddress(toRaw));
+
+  const contentSid = process.env.TWILIO_CONTENT_SID?.trim();
+  if (contentSid) {
+    params.set("ContentSid", contentSid);
+    params.set(
+      "ContentVariables",
+      JSON.stringify({
+        "1": alert.title,
+        "2": alert.message,
+      }),
+    );
+  } else {
+    params.set("Body", toSmsMessage(alert));
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+
+  try {
+    const auth = Buffer.from(`${sid}:${token}`).toString("base64");
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+        signal: controller.signal,
+      },
+    );
+    const text = await response.text();
+
+    if (!response.ok) {
+      return {
+        smsSent: false,
+        smsResponse: `Twilio HTTP ${response.status}: ${text.slice(0, 240)}`,
+      };
+    }
+
+    return {
+      smsSent: true,
+      smsResponse: text.slice(0, 500),
+    };
+  } catch (error) {
+    return {
+      smsSent: false,
+      smsResponse: `Twilio request failed: ${(error as Error).message}`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function sendFast2Sms(message: string): Promise<{ smsSent: boolean; smsResponse: string | null }> {
   const apiKey = process.env.FAST2SMS_API_KEY?.trim();
   const ownerPhone = process.env.FARM_OWNER_PHONE?.trim();
   const route = process.env.FAST2SMS_ROUTE?.trim() || "q";
-  const smsEnabled = (process.env.ENABLE_SMS_ALERTS ?? "true").toLowerCase() !== "false";
-
-  if (!smsEnabled) {
-    return {
-      smsSent: false,
-      smsResponse: "SMS notifications are disabled (ENABLE_SMS_ALERTS=false).",
-    };
-  }
 
   if (!apiKey || !ownerPhone) {
     return {
@@ -126,6 +214,50 @@ async function sendFast2Sms(message: string): Promise<{ smsSent: boolean; smsRes
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function sendAlertNotification(
+  alert: DashboardAlert,
+): Promise<{ smsSent: boolean; smsResponse: string | null }> {
+  const smsEnabled = (process.env.ENABLE_SMS_ALERTS ?? "true").toLowerCase() !== "false";
+  if (!smsEnabled) {
+    return {
+      smsSent: false,
+      smsResponse: "Alert notifications are disabled (ENABLE_SMS_ALERTS=false).",
+    };
+  }
+
+  const provider = (process.env.ALERT_PROVIDER ?? "auto").toLowerCase();
+
+  if (provider === "disabled" || provider === "none") {
+    return {
+      smsSent: false,
+      smsResponse: "Alert provider disabled via ALERT_PROVIDER.",
+    };
+  }
+
+  if (provider === "twilio") {
+    return sendTwilioWhatsApp(alert);
+  }
+
+  if (provider === "fast2sms") {
+    return sendFast2Sms(toSmsMessage(alert));
+  }
+
+  const hasTwilioConfig =
+    Boolean(process.env.TWILIO_ACCOUNT_SID?.trim()) &&
+    Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()) &&
+    Boolean(
+      process.env.TWILIO_WHATSAPP_TO?.trim() ||
+        process.env.FARM_OWNER_WHATSAPP?.trim() ||
+        process.env.FARM_OWNER_PHONE?.trim(),
+    );
+
+  if (hasTwilioConfig) {
+    return sendTwilioWhatsApp(alert);
+  }
+
+  return sendFast2Sms(toSmsMessage(alert));
 }
 
 function generateAlerts(
@@ -253,7 +385,7 @@ async function attachAlertStatuses(
       continue;
     }
 
-    const smsResult = await sendFast2Sms(toSmsMessage(alert));
+    const smsResult = await sendAlertNotification(alert);
 
     try {
       const created = await storage.createAlertEvent({
@@ -354,6 +486,8 @@ export async function buildDashboardAnalytics(
     mortalityByDate.set(key, (mortalityByDate.get(key) ?? 0) + toNumber(record.dead));
   }
 
+  const latestChicken = chickenRecords[0];
+
   for (const [key, feed] of Array.from(feedByDate.entries())) {
     expenseByDate.set(key, (expenseByDate.get(key) ?? 0) + toNumber(feed.feedCost));
   }
@@ -432,6 +566,9 @@ export async function buildDashboardAnalytics(
       feedConsumedKg: todayFeed?.feedConsumedKg ?? 0,
       feedStockKg: todayFeed?.feedStockKg ?? (latestFeedStockKg ?? 0),
       mortalityCount: mortalityByDate.get(todayKey) ?? 0,
+      healthyChickens: toNumber(latestChicken?.healthy),
+      sickChickens: toNumber(latestChicken?.sick),
+      newChicks: toNumber(latestChicken?.chicks),
     },
     profit: {
       daily: todayProfit,
@@ -450,3 +587,4 @@ export async function buildDashboardAnalytics(
 export async function triggerSmartAlerts(storage: IStorage): Promise<void> {
   await buildDashboardAnalytics(storage, { triggerSms: true });
 }
+

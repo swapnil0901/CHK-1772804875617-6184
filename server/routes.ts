@@ -85,6 +85,63 @@ function formatDateLabel(value: string | Date | null | undefined): string {
   });
 }
 
+function normalizeWhatsAppPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return `91${digits.slice(1)}`;
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return digits;
+  }
+  return digits;
+}
+
+function generateWhatsAppAlertMessage(input: {
+  date: string;
+  eggs: number;
+  brokenEggs: number;
+  feed: number;
+  profit: number;
+  status: string;
+}): string {
+  return [
+    "Smart Poultry Farm Alert",
+    "",
+    `Date: ${input.date}`,
+    "",
+    `Eggs Produced: ${input.eggs}`,
+    `Broken Eggs: ${input.brokenEggs}`,
+    "",
+    `Feed Consumed: ${input.feed} kg`,
+    "",
+    `Profit Today: Rs ${input.profit}`,
+    "",
+    `System Status: ${input.status}`,
+    "",
+    "Smart Poultry Monitoring System",
+  ].join("\n");
+}
+
+function resolveStorageDate(value: string | undefined, fallback: string): string {
+  if (!value) {
+    return fallback;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+
+  return parsed.toISOString().split("T")[0];
+}
+
 async function buildFarmSnapshot(): Promise<FarmSnapshot> {
   const [eggs, sales, chickens, diseases, expenses, vaccinations] = await Promise.all([
     storage.getEggCollections(),
@@ -752,6 +809,83 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Failed to build dashboard analytics:", err);
       res.status(500).json({ message: "Unable to load dashboard analytics" });
+    }
+  });
+
+  app.get(api.alerts.history.path, async (req, res) => {
+    const limit = Number(req.query.limit ?? 50);
+    const records = await storage.getWhatsAppMessages(Number.isFinite(limit) ? limit : 50);
+    res.json(records);
+  });
+
+  // WhatsApp Link Alert Generator (No paid API required)
+  app.post(api.alerts.sendWhatsApp.path, async (req, res) => {
+    try {
+      const input = api.alerts.sendWhatsApp.input.parse(req.body);
+      const analytics = await buildDashboardAnalytics(storage, { triggerSms: false });
+      const hasManualValues =
+        input.eggs !== undefined ||
+        input.brokenEggs !== undefined ||
+        input.feed !== undefined ||
+        input.profit !== undefined ||
+        input.date !== undefined;
+
+      const eggs = input.eggs ?? analytics.today.eggsProduced;
+      const brokenEggs = input.brokenEggs ?? analytics.today.brokenEggs;
+      const feed = input.feed ?? analytics.today.feedConsumedKg;
+      const profit = input.profit ?? analytics.today.netProfit;
+      const displayDate = input.date ?? analytics.today.date;
+      const storageDate = resolveStorageDate(input.date, analytics.today.date);
+      const status =
+        input.status?.trim() ||
+        (analytics.alerts.some((alert) => alert.severity === "critical")
+          ? "Needs Attention"
+          : "Normal");
+
+      const fallbackPhone =
+        process.env.FARM_OWNER_WHATSAPP?.trim() ?? process.env.FARM_OWNER_PHONE?.trim();
+      const rawPhone = input.phone ?? fallbackPhone;
+      if (!rawPhone) {
+        return res.status(400).json({
+          message: "Phone is required. Pass phone in body or set FARM_OWNER_PHONE.",
+        });
+      }
+
+      const phone = normalizeWhatsAppPhone(rawPhone);
+      const message = generateWhatsAppAlertMessage({
+        date: displayDate,
+        eggs,
+        brokenEggs,
+        feed,
+        profit,
+        status,
+      });
+      const whatsappLink = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      const saved = await storage.createWhatsAppMessage({
+        phone,
+        messageDate: storageDate,
+        eggs,
+        brokenEggs,
+        feedConsumedKg: feed,
+        profit,
+        status,
+        messageText: message,
+        whatsappLink,
+      });
+
+      return res.json({
+        status: "Message Ready",
+        messageId: saved.id,
+        dataSource: hasManualValues ? "request" : "database",
+        preview: message,
+        whatsappLink,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Failed to generate WhatsApp alert link:", err);
+      return res.status(500).json({ message: "Unable to generate WhatsApp alert link" });
     }
   });
 
