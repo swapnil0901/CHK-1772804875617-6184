@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
+import { buildDashboardAnalytics, triggerSmartAlerts } from "./services/dashboard-analytics";
 
 function resolveOpenAIBaseUrl(): string | undefined {
   const raw =
@@ -584,6 +585,9 @@ export async function registerRoutes(
     try {
       const input = api.eggCollection.create.input.parse(req.body);
       const record = await storage.createEggCollection(input);
+      void triggerSmartAlerts(storage).catch((error) => {
+        console.error("Smart alert trigger failed after egg collection:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -624,6 +628,9 @@ export async function registerRoutes(
     try {
       const input = api.chickens.create.input.parse(req.body);
       const record = await storage.createChickenManagement(input);
+      void triggerSmartAlerts(storage).catch((error) => {
+        console.error("Smart alert trigger failed after chicken update:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -694,6 +701,29 @@ export async function registerRoutes(
     }
   });
 
+  // Feed Metrics
+  app.get(api.feedMetrics.list.path, async (_req, res) => {
+    const records = await storage.getFeedMetrics();
+    res.json(records);
+  });
+
+  app.post(api.feedMetrics.create.path, async (req, res) => {
+    try {
+      const input = api.feedMetrics.create.input.parse(req.body);
+      const record = await storage.createFeedMetric(input);
+      void triggerSmartAlerts(storage).catch((error) => {
+        console.error("Smart alert trigger failed after feed update:", error);
+      });
+      res.status(201).json(record);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Bad request" });
+      }
+    }
+  });
+
   // Vaccinations
   app.get(api.vaccinations.list.path, async (req, res) => {
     const records = await storage.getVaccinations();
@@ -711,6 +741,17 @@ export async function registerRoutes(
       } else {
         res.status(400).json({ message: "Bad request" });
       }
+    }
+  });
+
+  // Dashboard Analytics
+  app.get(api.dashboard.analytics.path, async (_req, res) => {
+    try {
+      const analytics = await buildDashboardAnalytics(storage, { triggerSms: true });
+      res.json(analytics);
+    } catch (err) {
+      console.error("Failed to build dashboard analytics:", err);
+      res.status(500).json({ message: "Unable to load dashboard analytics" });
     }
   });
 
@@ -871,6 +912,18 @@ async function seedDatabase() {
         amount: 2500,
         description: "50kg layers mash"
       });
+
+      await storage.createFeedMetric({
+        date: today,
+        openingStockKg: 42,
+        feedAddedKg: 15,
+        feedConsumedKg: 32,
+        closingStockKg: 25,
+        feedCost: 1800,
+        notes: "Daily feed consumption entry",
+      });
+
+      await triggerSmartAlerts(storage);
     }
   } catch (e) {
     console.error("Seed database failed:", e);

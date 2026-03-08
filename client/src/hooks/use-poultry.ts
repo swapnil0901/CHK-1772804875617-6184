@@ -68,10 +68,28 @@ export const { useList: useExpenses, useCreate: useCreateExpense } = createResou
   api.expenses.list.responses[200], api.expenses.create.responses[201]
 );
 
+export const { useList: useFeedMetrics, useCreate: useCreateFeedMetric } = createResourceHooks<z.infer<typeof api.feedMetrics.list.responses[200]>[0], z.infer<typeof api.feedMetrics.create.input>>(
+  'feed-metrics', api.feedMetrics.list.path, api.feedMetrics.create.path,
+  api.feedMetrics.list.responses[200], api.feedMetrics.create.responses[201]
+);
+
 export const { useList: useVaccinations, useCreate: useCreateVaccination } = createResourceHooks<z.infer<typeof api.vaccinations.list.responses[200]>[0], z.infer<typeof api.vaccinations.create.input>>(
   'vaccinations', api.vaccinations.list.path, api.vaccinations.create.path, 
   api.vaccinations.list.responses[200], api.vaccinations.create.responses[201]
 );
+
+export function useDashboardAnalytics() {
+  return useQuery({
+    queryKey: ['dashboard-analytics'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(api.dashboard.analytics.path);
+      if (!res.ok) throw new Error('Failed to fetch dashboard analytics');
+      return api.dashboard.analytics.responses[200].parse(await res.json());
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
 
 export function useAIChat() {
   return useMutation({

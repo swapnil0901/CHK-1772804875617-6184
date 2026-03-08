@@ -196,6 +196,35 @@ async function initializeSchema(database: AppDatabase): Promise<void> {
   `);
 
   await database.execute(sql`
+    CREATE TABLE IF NOT EXISTS feed_metrics (
+      id SERIAL PRIMARY KEY,
+      date DATE NOT NULL,
+      opening_stock_kg NUMERIC NOT NULL DEFAULT 0,
+      feed_added_kg NUMERIC NOT NULL DEFAULT 0,
+      feed_consumed_kg NUMERIC NOT NULL,
+      closing_stock_kg NUMERIC NOT NULL,
+      feed_cost NUMERIC NOT NULL DEFAULT 0,
+      notes TEXT
+    )
+  `);
+
+  await database.execute(sql`
+    CREATE TABLE IF NOT EXISTS alert_events (
+      id SERIAL PRIMARY KEY,
+      alert_date DATE NOT NULL,
+      alert_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      alert_message TEXT NOT NULL,
+      threshold_value NUMERIC NOT NULL DEFAULT 0,
+      current_value NUMERIC NOT NULL DEFAULT 0,
+      sms_sent BOOLEAN NOT NULL DEFAULT FALSE,
+      sms_response TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      CONSTRAINT alert_events_unique_day_type UNIQUE(alert_date, alert_type)
+    )
+  `);
+
+  await database.execute(sql`
     CREATE TABLE IF NOT EXISTS vaccinations (
       id SERIAL PRIMARY KEY,
       vaccine_name TEXT NOT NULL,

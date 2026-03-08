@@ -12,6 +12,7 @@ import EggSales from "./pages/EggSales";
 import ChickenManagement from "./pages/ChickenManagement";
 import DiseaseTracker from "./pages/DiseaseTracker";
 import Inventory from "./pages/Inventory";
+import FeedManagement from "./pages/FeedManagement";
 import Expenses from "./pages/Expenses";
 import Vaccinations from "./pages/Vaccinations";
 import Reports from "./pages/Reports";
@@ -53,6 +54,9 @@ function Router() {
       </Route>
       <Route path="/inventory">
         {() => <ProtectedRoute component={Inventory} />}
+      </Route>
+      <Route path="/feed">
+        {() => <ProtectedRoute component={FeedManagement} />}
       </Route>
       <Route path="/expenses">
         {() => <ProtectedRoute component={Expenses} />}

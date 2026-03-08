@@ -7,6 +7,7 @@ import {
   insertDiseaseRecordsSchema, diseaseRecords,
   insertInventorySchema, inventory,
   insertExpensesSchema, expenses,
+  insertFeedMetricsSchema, feedMetrics,
   insertVaccinationsSchema, vaccinations
 } from './schema';
 
@@ -16,6 +17,62 @@ export const errorSchemas = {
   internal: z.object({ message: z.string() }),
   unauthorized: z.object({ message: z.string() }),
 };
+
+const dashboardAlertSchema = z.object({
+  type: z.enum(["feed_low", "egg_drop", "mortality_increase"]),
+  title: z.string(),
+  message: z.string(),
+  severity: z.enum(["warning", "critical"]),
+  thresholdValue: z.number(),
+  currentValue: z.number(),
+  smsSent: z.boolean(),
+  smsSentAt: z.string().nullable(),
+});
+
+const dashboardAnalyticsSchema = z.object({
+  generatedAt: z.string(),
+  today: z.object({
+    date: z.string(),
+    eggsProduced: z.number(),
+    brokenEggs: z.number(),
+    totalRevenue: z.number(),
+    totalCost: z.number(),
+    netProfit: z.number(),
+    feedConsumedKg: z.number(),
+    feedStockKg: z.number(),
+    mortalityCount: z.number(),
+  }),
+  profit: z.object({
+    daily: z.number(),
+    monthly: z.number(),
+    yearly: z.number(),
+  }),
+  charts: z.object({
+    eggProduction: z.array(
+      z.object({
+        date: z.string(),
+        eggsProduced: z.number(),
+        brokenEggs: z.number(),
+      }),
+    ),
+    feedConsumption: z.array(
+      z.object({
+        date: z.string(),
+        feedConsumedKg: z.number(),
+        feedStockKg: z.number(),
+      }),
+    ),
+    profitAnalysis: z.array(
+      z.object({
+        date: z.string(),
+        revenue: z.number(),
+        cost: z.number(),
+        profit: z.number(),
+      }),
+    ),
+  }),
+  alerts: z.array(dashboardAlertSchema),
+});
 
 export const api = {
   auth: {
@@ -162,6 +219,28 @@ export const api = {
       }
     }
   },
+  feedMetrics: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/feed-metrics' as const,
+      responses: { 200: z.array(z.custom<typeof feedMetrics.$inferSelect>()) }
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/feed-metrics' as const,
+      input: insertFeedMetricsSchema.extend({
+        openingStockKg: z.union([z.string(), z.number()]).default(0),
+        feedAddedKg: z.union([z.string(), z.number()]).default(0),
+        feedConsumedKg: z.union([z.string(), z.number()]),
+        closingStockKg: z.union([z.string(), z.number()]),
+        feedCost: z.union([z.string(), z.number()]).default(0),
+      }),
+      responses: {
+        201: z.custom<typeof feedMetrics.$inferSelect>(),
+        400: errorSchemas.validation,
+      }
+    }
+  },
   vaccinations: {
     list: {
       method: 'GET' as const,
@@ -177,6 +256,15 @@ export const api = {
       responses: {
         201: z.custom<typeof vaccinations.$inferSelect>(),
         400: errorSchemas.validation,
+      }
+    }
+  },
+  dashboard: {
+    analytics: {
+      method: 'GET' as const,
+      path: '/api/dashboard/analytics' as const,
+      responses: {
+        200: dashboardAnalyticsSchema,
       }
     }
   },

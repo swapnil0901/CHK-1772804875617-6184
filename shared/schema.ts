@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, date, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, date, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -81,6 +81,30 @@ export const expenses = pgTable("expenses", {
   description: text("description"),
 });
 
+export const feedMetrics = pgTable("feed_metrics", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  openingStockKg: numeric("opening_stock_kg").notNull().default("0"),
+  feedAddedKg: numeric("feed_added_kg").notNull().default("0"),
+  feedConsumedKg: numeric("feed_consumed_kg").notNull(),
+  closingStockKg: numeric("closing_stock_kg").notNull(),
+  feedCost: numeric("feed_cost").notNull().default("0"),
+  notes: text("notes"),
+});
+
+export const alertEvents = pgTable("alert_events", {
+  id: serial("id").primaryKey(),
+  alertDate: date("alert_date").notNull(),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").notNull(),
+  alertMessage: text("alert_message").notNull(),
+  thresholdValue: numeric("threshold_value").notNull().default("0"),
+  currentValue: numeric("current_value").notNull().default("0"),
+  smsSent: boolean("sms_sent").notNull().default(false),
+  smsResponse: text("sms_response"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const vaccinations = pgTable("vaccinations", {
   id: serial("id").primaryKey(),
   vaccineName: text("vaccine_name").notNull(),
@@ -98,6 +122,8 @@ export const insertChickenManagementSchema = createInsertSchema(chickenManagemen
 export const insertDiseaseRecordsSchema = createInsertSchema(diseaseRecords).omit({ id: true });
 export const insertInventorySchema = createInsertSchema(inventory).omit({ id: true });
 export const insertExpensesSchema = createInsertSchema(expenses).omit({ id: true });
+export const insertFeedMetricsSchema = createInsertSchema(feedMetrics).omit({ id: true });
+export const insertAlertEventsSchema = createInsertSchema(alertEvents).omit({ id: true, createdAt: true });
 export const insertVaccinationsSchema = createInsertSchema(vaccinations).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -109,6 +135,8 @@ export type InsertChickenManagement = z.infer<typeof insertChickenManagementSche
 export type InsertDiseaseRecord = z.infer<typeof insertDiseaseRecordsSchema>;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertExpense = z.infer<typeof insertExpensesSchema>;
+export type InsertFeedMetric = z.infer<typeof insertFeedMetricsSchema>;
+export type InsertAlertEvent = z.infer<typeof insertAlertEventsSchema>;
 export type InsertVaccination = z.infer<typeof insertVaccinationsSchema>;
 
 export type User = typeof users.$inferSelect;
@@ -120,4 +148,6 @@ export type ChickenManagement = typeof chickenManagement.$inferSelect;
 export type DiseaseRecord = typeof diseaseRecords.$inferSelect;
 export type Inventory = typeof inventory.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
+export type FeedMetric = typeof feedMetrics.$inferSelect;
+export type AlertEvent = typeof alertEvents.$inferSelect;
 export type Vaccination = typeof vaccinations.$inferSelect;

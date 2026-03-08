@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, ensureDatabaseReady, isPostgresConfigured } from "./db";
 import {
   users,
@@ -8,6 +8,8 @@ import {
   diseaseRecords,
   inventory,
   expenses,
+  feedMetrics,
+  alertEvents,
   vaccinations,
   type User,
   type EggCollection,
@@ -16,6 +18,8 @@ import {
   type DiseaseRecord,
   type Inventory,
   type Expense,
+  type FeedMetric,
+  type AlertEvent,
   type Vaccination,
   type InsertUser,
 } from "@shared/schema";
@@ -32,6 +36,17 @@ function toDateOnly(value: string | Date | undefined): string {
 function toNumber(value: unknown, fallback = 0): number {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+}
+
+export interface CreateAlertEventInput {
+  alertDate: string;
+  alertType: string;
+  severity: string;
+  alertMessage: string;
+  thresholdValue: number;
+  currentValue: number;
+  smsSent: boolean;
+  smsResponse?: string | null;
 }
 
 export interface IStorage {
@@ -63,6 +78,15 @@ export interface IStorage {
   // Expenses
   getExpenses(): Promise<Expense[]>;
   createExpense(data: z.infer<typeof api.expenses.create.input>): Promise<Expense>;
+
+  // Feed Metrics
+  getFeedMetrics(): Promise<FeedMetric[]>;
+  createFeedMetric(data: z.infer<typeof api.feedMetrics.create.input>): Promise<FeedMetric>;
+
+  // Alerts
+  getAlertEventsByDate(alertDate: string): Promise<AlertEvent[]>;
+  getAlertEventByDateAndType(alertDate: string, alertType: string): Promise<AlertEvent | undefined>;
+  createAlertEvent(input: CreateAlertEventInput): Promise<AlertEvent>;
 
   // Vaccinations
   getVaccinations(): Promise<Vaccination[]>;
@@ -283,6 +307,89 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
 
+  // Feed Metrics
+  async getFeedMetrics(): Promise<FeedMetric[]> {
+    const database = await this.database();
+    return database
+      .select()
+      .from(feedMetrics)
+      .orderBy(desc(feedMetrics.date), desc(feedMetrics.id));
+  }
+
+  async createFeedMetric(data: z.infer<typeof api.feedMetrics.create.input>): Promise<FeedMetric> {
+    const database = await this.database();
+    const [record] = await database
+      .insert(feedMetrics)
+      .values({
+        date: toDateOnly(data.date),
+        openingStockKg: toNumber(data.openingStockKg, 0).toString(),
+        feedAddedKg: toNumber(data.feedAddedKg, 0).toString(),
+        feedConsumedKg: toNumber(data.feedConsumedKg).toString(),
+        closingStockKg: toNumber(data.closingStockKg).toString(),
+        feedCost: toNumber(data.feedCost, 0).toString(),
+        notes: data.notes ?? null,
+      })
+      .returning();
+
+    if (!record) {
+      throw new Error("Failed to create feed metric record.");
+    }
+
+    return record;
+  }
+
+  // Alerts
+  async getAlertEventsByDate(alertDate: string): Promise<AlertEvent[]> {
+    const database = await this.database();
+    return database
+      .select()
+      .from(alertEvents)
+      .where(eq(alertEvents.alertDate, toDateOnly(alertDate)))
+      .orderBy(desc(alertEvents.createdAt), desc(alertEvents.id));
+  }
+
+  async getAlertEventByDateAndType(
+    alertDate: string,
+    alertType: string,
+  ): Promise<AlertEvent | undefined> {
+    const database = await this.database();
+    const [event] = await database
+      .select()
+      .from(alertEvents)
+      .where(
+        and(
+          eq(alertEvents.alertDate, toDateOnly(alertDate)),
+          eq(alertEvents.alertType, alertType),
+        ),
+      )
+      .limit(1);
+
+    return event;
+  }
+
+  async createAlertEvent(input: CreateAlertEventInput): Promise<AlertEvent> {
+    const database = await this.database();
+    const [event] = await database
+      .insert(alertEvents)
+      .values({
+        alertDate: toDateOnly(input.alertDate),
+        alertType: input.alertType,
+        severity: input.severity,
+        alertMessage: input.alertMessage,
+        thresholdValue: toNumber(input.thresholdValue, 0).toString(),
+        currentValue: toNumber(input.currentValue, 0).toString(),
+        smsSent: input.smsSent,
+        smsResponse: input.smsResponse ?? null,
+      })
+      .returning();
+
+    if (!event) {
+      throw new Error("Failed to create alert event.");
+    }
+
+    return event;
+  }
+
   // Vaccinations
   async getVaccinations(): Promise<Vaccination[]> {
     const database = await this.database();
@@ -320,6 +427,8 @@ export class MemoryStorage implements IStorage {
   private diseaseId = 1;
   private inventoryId = 1;
   private expenseId = 1;
+  private feedMetricId = 1;
+  private alertEventId = 1;
   private vaccinationId = 1;
 
   private userRecords: User[] = [];
@@ -329,6 +438,8 @@ export class MemoryStorage implements IStorage {
   private diseaseRecordsList: DiseaseRecord[] = [];
   private inventoryRecords: Inventory[] = [];
   private expenseRecords: Expense[] = [];
+  private feedMetricRecords: FeedMetric[] = [];
+  private alertEventRecords: AlertEvent[] = [];
   private vaccinationRecords: Vaccination[] = [];
 
   async getUserByEmail(email: string): Promise<User | undefined> {
@@ -461,6 +572,62 @@ export class MemoryStorage implements IStorage {
     };
     this.expenseRecords.push(record);
     return record;
+  }
+
+  async getFeedMetrics(): Promise<FeedMetric[]> {
+    return [...this.feedMetricRecords].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  }
+
+  async createFeedMetric(data: z.infer<typeof api.feedMetrics.create.input>): Promise<FeedMetric> {
+    const record: FeedMetric = {
+      id: this.feedMetricId++,
+      date: toDateOnly(data.date),
+      openingStockKg: toNumber(data.openingStockKg, 0).toString(),
+      feedAddedKg: toNumber(data.feedAddedKg, 0).toString(),
+      feedConsumedKg: toNumber(data.feedConsumedKg, 0).toString(),
+      closingStockKg: toNumber(data.closingStockKg, 0).toString(),
+      feedCost: toNumber(data.feedCost, 0).toString(),
+      notes: data.notes ?? null,
+    };
+    this.feedMetricRecords.push(record);
+    return record;
+  }
+
+  async getAlertEventsByDate(alertDate: string): Promise<AlertEvent[]> {
+    const day = toDateOnly(alertDate);
+    return [...this.alertEventRecords]
+      .filter((event) => event.alertDate === day)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getAlertEventByDateAndType(
+    alertDate: string,
+    alertType: string,
+  ): Promise<AlertEvent | undefined> {
+    const day = toDateOnly(alertDate);
+    return this.alertEventRecords.find(
+      (event) => event.alertDate === day && event.alertType === alertType,
+    );
+  }
+
+  async createAlertEvent(input: CreateAlertEventInput): Promise<AlertEvent> {
+    const event: AlertEvent = {
+      id: this.alertEventId++,
+      alertDate: toDateOnly(input.alertDate),
+      alertType: input.alertType,
+      severity: input.severity,
+      alertMessage: input.alertMessage,
+      thresholdValue: toNumber(input.thresholdValue, 0).toString(),
+      currentValue: toNumber(input.currentValue, 0).toString(),
+      smsSent: input.smsSent,
+      smsResponse: input.smsResponse ?? null,
+      createdAt: new Date(),
+    };
+
+    this.alertEventRecords.push(event);
+    return event;
   }
 
   async getVaccinations(): Promise<Vaccination[]> {
