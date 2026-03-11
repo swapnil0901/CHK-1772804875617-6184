@@ -35,6 +35,7 @@ import {
   useFeedMetrics,
   useSales,
 } from "@/hooks/use-poultry";
+import { useAuth } from "@/hooks/use-auth";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type DashboardData = {
@@ -349,6 +350,7 @@ function toLabel(date: string): string {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const analyticsQuery = useDashboardAnalytics();
   const eggsQuery = useEggs();
   const salesQuery = useSales();
@@ -379,6 +381,7 @@ export default function Dashboard() {
 
   const data = analyticsQuery.data ?? fallbackData;
   const isLoading = analyticsQuery.isLoading && !analyticsQuery.error;
+  const canViewProfit = user?.role === "admin";
 
   const eggChartData = useMemo(
     () =>
@@ -446,31 +449,42 @@ export default function Dashboard() {
       icon: TrendingDown,
       color: "bg-destructive/10 text-destructive",
     },
-    {
-      title: "Total Revenue",
-      value: formatCurrency(data.today.totalRevenue),
-      icon: IndianRupee,
-      color: "bg-success/15 text-success",
-    },
-    {
-      title: "Total Cost",
-      value: formatCurrency(data.today.totalCost),
-      icon: Package,
-      color: "bg-warning/15 text-warning",
-    },
-    {
-      title: "Net Profit",
-      value: formatCurrency(data.today.netProfit),
-      icon: data.today.netProfit >= 0 ? TrendingUp : TrendingDown,
-      color: data.today.netProfit >= 0 ? "bg-success/15 text-success" : "bg-destructive/10 text-destructive",
-    },
   ];
+  if (canViewProfit) {
+    todayStats.push(
+      {
+        title: "Total Revenue",
+        value: formatCurrency(data.today.totalRevenue),
+        icon: IndianRupee,
+        color: "bg-success/15 text-success",
+      },
+      {
+        title: "Total Cost",
+        value: formatCurrency(data.today.totalCost),
+        icon: Package,
+        color: "bg-warning/15 text-warning",
+      },
+      {
+        title: "Net Profit",
+        value: formatCurrency(data.today.netProfit),
+        icon: data.today.netProfit >= 0 ? TrendingUp : TrendingDown,
+        color:
+          data.today.netProfit >= 0
+            ? "bg-success/15 text-success"
+            : "bg-destructive/10 text-destructive",
+      },
+    );
+  }
 
   return (
     <AppLayout>
       <PageHeader
         title="Farm Dashboard"
-        description="Egg production, feed usage, profit analysis, and smart alerts."
+        description={
+          canViewProfit
+            ? "Egg production, feed usage, profit analysis, and smart alerts."
+            : "Egg production, flock health, feed usage, and smart alerts."
+        }
       />
 
       {analyticsQuery.error && (
@@ -487,11 +501,13 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <ProfitCard label="Daily Profit" value={data.profit.daily} />
-        <ProfitCard label="Monthly Profit" value={data.profit.monthly} />
-        <ProfitCard label="Yearly Profit" value={data.profit.yearly} />
-      </div>
+      {canViewProfit && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <ProfitCard label="Daily Profit" value={data.profit.daily} />
+          <ProfitCard label="Monthly Profit" value={data.profit.monthly} />
+          <ProfitCard label="Yearly Profit" value={data.profit.yearly} />
+        </div>
+      )}
 
       <Card className="mb-8">
         <div className="flex items-center gap-2 mb-4">
@@ -524,7 +540,7 @@ export default function Dashboard() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={cn("grid gap-6", canViewProfit ? "grid-cols-1 xl:grid-cols-3" : "grid-cols-1 xl:grid-cols-2")}>
         <Card className="h-[360px]">
           <h3 className="text-lg font-bold font-display mb-4">Egg Production (Daily)</h3>
           <ResponsiveContainer width="100%" height={280}>
@@ -563,24 +579,26 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </Card>
 
-        <Card className="h-[360px]">
-          <h3 className="text-lg font-bold font-display mb-4">Profit Analysis (Daily)</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={profitChartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" axisLine={false} tickLine={false} />
-              <YAxis axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Line
-                type="monotone"
-                dataKey="profit"
-                stroke="hsl(var(--success))"
-                strokeWidth={3}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
+        {canViewProfit && (
+          <Card className="h-[360px]">
+            <h3 className="text-lg font-bold font-display mb-4">Profit Analysis (Daily)</h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={profitChartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="hsl(var(--success))"
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );

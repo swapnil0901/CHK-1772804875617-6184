@@ -1,10 +1,16 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 import { buildDashboardAnalytics, triggerSmartAlerts } from "./services/dashboard-analytics";
+import {
+  notifyDiseaseDetected,
+  notifyEggCollectionSaved,
+  notifyLowFeedIfNeeded,
+  notifyVaccinationReminderIfNeeded,
+} from "./services/notifications";
 
 function resolveOpenAIBaseUrl(): string | undefined {
   const raw =
@@ -90,6 +96,48 @@ function sanitizeUser(user: {
     email: user.email,
     role: user.role,
     createdAt: user.createdAt ?? null,
+  };
+}
+
+async function getRequestUser(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer mock-jwt-token-")) {
+    return null;
+  }
+
+  const id = Number.parseInt(authHeader.replace("Bearer mock-jwt-token-", ""), 10);
+  if (!Number.isFinite(id)) {
+    return null;
+  }
+
+  return storage.getUserById(id);
+}
+
+function maskFinancialAnalytics<T extends z.infer<typeof api.dashboard.analytics.responses[200]>>(
+  analytics: T,
+): T {
+  return {
+    ...analytics,
+    today: {
+      ...analytics.today,
+      totalRevenue: 0,
+      totalCost: 0,
+      netProfit: 0,
+    },
+    profit: {
+      daily: 0,
+      monthly: 0,
+      yearly: 0,
+    },
+    charts: {
+      ...analytics.charts,
+      profitAnalysis: analytics.charts.profitAnalysis.map((item) => ({
+        ...item,
+        revenue: 0,
+        cost: 0,
+        profit: 0,
+      })),
+    },
   };
 }
 
@@ -728,6 +776,9 @@ export async function registerRoutes(
       void triggerSmartAlerts(storage).catch((error) => {
         console.error("Smart alert trigger failed after egg collection:", error);
       });
+      void notifyEggCollectionSaved(record).catch((error) => {
+        console.error("Egg collection notification failed:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -811,6 +862,9 @@ export async function registerRoutes(
     try {
       const input = api.diseases.create.input.parse(req.body);
       const record = await storage.createDiseaseRecord(input);
+      void notifyDiseaseDetected(record).catch((error) => {
+        console.error("Disease notification failed:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -874,6 +928,9 @@ export async function registerRoutes(
       void triggerSmartAlerts(storage).catch((error) => {
         console.error("Smart alert trigger failed after feed update:", error);
       });
+      void notifyLowFeedIfNeeded(record).catch((error) => {
+        console.error("Feed notification failed:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -894,6 +951,9 @@ export async function registerRoutes(
     try {
       const input = api.vaccinations.create.input.parse(req.body);
       const record = await storage.createVaccination(input);
+      void notifyVaccinationReminderIfNeeded(record).catch((error) => {
+        console.error("Vaccination notification failed:", error);
+      });
       res.status(201).json(record);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -905,10 +965,11 @@ export async function registerRoutes(
   });
 
   // Dashboard Analytics
-  app.get(api.dashboard.analytics.path, async (_req, res) => {
+  app.get(api.dashboard.analytics.path, async (req, res) => {
     try {
       const analytics = await buildDashboardAnalytics(storage, { triggerSms: true });
-      res.json(analytics);
+      const user = await getRequestUser(req);
+      res.json(user?.role === "admin" ? analytics : maskFinancialAnalytics(analytics));
     } catch (err) {
       console.error("Failed to build dashboard analytics:", err);
       res.status(500).json({ message: "Unable to load dashboard analytics" });
