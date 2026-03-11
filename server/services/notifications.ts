@@ -1,4 +1,7 @@
 const DEFAULT_FEED_THRESHOLD_KG = 10;
+const DEFAULT_EGG_COLLECTION_NOTIFY_THRESHOLD = 1;
+const DEFAULT_DISEASE_NOTIFY_THRESHOLD = 1;
+const DEFAULT_VACCINATION_REMINDER_DAYS = 1;
 
 function toNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
@@ -129,9 +132,17 @@ export async function notifyEggCollectionSaved(input: {
   chickenType?: string;
   shed?: string;
 }): Promise<void> {
+  const threshold = getEnvNumber(
+    "EGG_COLLECTION_NOTIFY_THRESHOLD",
+    DEFAULT_EGG_COLLECTION_NOTIFY_THRESHOLD,
+  );
+  if (toNumber(input.eggsCollected) < threshold) {
+    return;
+  }
+
   const chickenType = input.chickenType === "Broiler" ? "Broiler" : "Pure";
   await sendNotification(
-    `Egg collection update: ${input.eggsCollected} ${chickenType.toLowerCase()} eggs collected on ${input.date} from ${input.shed || "farm shed"}.`,
+    `${input.eggsCollected} ${chickenType.toLowerCase()} eggs collected today from ${input.shed || "farm shed"}.`,
   );
 }
 
@@ -140,8 +151,16 @@ export async function notifyDiseaseDetected(input: {
   chickensAffected: number;
   date: string | Date;
 }): Promise<void> {
+  const threshold = getEnvNumber(
+    "DISEASE_AFFECTED_NOTIFY_THRESHOLD",
+    DEFAULT_DISEASE_NOTIFY_THRESHOLD,
+  );
+  if (toNumber(input.chickensAffected) < threshold) {
+    return;
+  }
+
   await sendNotification(
-    `Disease alert: ${input.diseaseName} detected on ${input.date}. ${input.chickensAffected} birds affected.`,
+    `Chicken disease detected: ${input.diseaseName} in shed/farm area. ${input.chickensAffected} birds affected.`,
   );
 }
 
@@ -156,7 +175,7 @@ export async function notifyLowFeedIfNeeded(input: {
   }
 
   await sendNotification(
-    `Feed inventory alert: stock is low at ${closingStockKg.toFixed(1)} kg on ${input.date}. Threshold is ${threshold} kg.`,
+    `Feed inventory is low. Current stock is ${closingStockKg.toFixed(1)} kg and threshold is ${threshold} kg.`,
   );
 }
 
@@ -165,15 +184,19 @@ export async function notifyVaccinationReminderIfNeeded(input: {
   nextVaccination: string | Date;
 }): Promise<void> {
   const nextVaccination = parseDateOnly(input.nextVaccination);
-  const tomorrow = new Date();
-  tomorrow.setHours(0, 0, 0, 0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const reminderDays = Math.max(
+    0,
+    getEnvNumber("VACCINATION_REMINDER_DAYS_BEFORE", DEFAULT_VACCINATION_REMINDER_DAYS),
+  );
+  const reminderDate = new Date();
+  reminderDate.setHours(0, 0, 0, 0);
+  reminderDate.setDate(reminderDate.getDate() + reminderDays);
 
-  if (nextVaccination.getTime() !== tomorrow.getTime()) {
+  if (nextVaccination.getTime() !== reminderDate.getTime()) {
     return;
   }
 
   await sendNotification(
-    `Vaccination reminder: ${input.vaccineName} is scheduled for tomorrow (${input.nextVaccination}).`,
+    `Vaccination scheduled ${reminderDays === 0 ? "today" : "tomorrow"}: ${input.vaccineName} on ${input.nextVaccination}.`,
   );
 }
