@@ -4,9 +4,13 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev": "vite",
+    "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
+    "build:client": "vite build",
+    "preview": "vite preview",
     "start": "node dist/index.cjs",
+    "start:client": "vite preview",
     "check": "tsc"
   },
   "dependencies": {
